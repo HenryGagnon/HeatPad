@@ -1,0 +1,851 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="HeatPad">
+<title>HeatPad Remote</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="theme-color" content="#D7ECFA">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600;700&display=swap">
+<style>
+html { box-sizing: border-box; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+[hidden] { display: none !important; }
+</style>
+<style>
+/* Layout: one-screen phone remote. Header, big 270° dial with the set temp in its face,
+   live reading below, then a full-width OFF/ON switch. Single light look: baby blue + orange. */
+:root {
+  --sky: #D7ECFA;
+  --sky-deep: #BFDFF5;
+  --track: #A9D2EF;
+  --face: #F6FBFF;
+  --ink: #15324A;
+  --ink-soft: #577590;
+  --orange: #FF7A1A;
+  --orange-deep: #CF5300;
+  --orange-soft: #FFD5B3;
+  --alert: #B8321C;
+  --alert-soft: #FADAD3;
+  --white: #FFFFFF;
+  --shadow: rgba(21, 50, 74, 0.14);
+
+  --f-display: "Bricolage Grotesque", ui-rounded, "SF Pro Rounded", system-ui, sans-serif;
+  --f-body: "Figtree", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+
+  color-scheme: light;
+}
+
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background:
+    radial-gradient(130% 55% at 50% 0%, var(--face) 0%, rgba(246, 251, 255, 0) 70%),
+    var(--sky);
+  color: var(--ink);
+  font-family: var(--f-body);
+  font-size: 15px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.app {
+  box-sizing: border-box;
+  min-height: 100%;
+  max-width: 460px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding-block: 14px 22px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+
+/* ---------- Header ---------- */
+.top {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.brand { min-width: 0; }
+.brand h1 {
+  margin: 0;
+  font-family: var(--f-display);
+  font-weight: 800;
+  font-size: 26px;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+.brand h1 span { color: var(--orange-deep); }
+.brand p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.conn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 18px 0 14px;
+  border: 0;
+  border-radius: 999px;
+  font: 700 15px/1 var(--f-body);
+  cursor: pointer;
+  background: var(--orange);
+  color: var(--white);
+  box-shadow: 0 6px 16px rgba(255, 122, 26, 0.35);
+  transition: background-color .2s, color .2s, box-shadow .2s;
+}
+.conn svg { width: 18px; height: 18px; flex: none; }
+.conn:disabled { opacity: .75; cursor: progress; }
+.conn[data-state="connected"], .conn[data-state="demo"] {
+  background: var(--white);
+  color: var(--ink);
+  box-shadow: 0 2px 8px var(--shadow);
+}
+.conn .dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--orange);
+  display: none;
+}
+.conn[data-state="connected"] .dot, .conn[data-state="demo"] .dot { display: block; }
+.conn[data-state="confirm"] { background: var(--ink); color: var(--white); box-shadow: none; }
+.conn:focus-visible, .step:focus-visible, .switch button:focus-visible, .btn:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 3px;
+}
+
+/* ---------- Dial ---------- */
+.dial {
+  position: relative;
+  width: min(100%, 360px);
+  aspect-ratio: 1;
+  max-width: 100%;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: opacity .25s;
+}
+.dial svg { display: block; width: 100%; height: 100%; overflow: visible; cursor: grab; }
+.dial:focus-visible { outline: none; }
+.dial:focus-visible .face { stroke: var(--ink); stroke-width: 3; }
+.dial.dragging svg { cursor: grabbing; }
+
+.face { fill: var(--face); filter: drop-shadow(0 10px 18px var(--shadow)); }
+.track { fill: none; stroke: var(--track); stroke-width: 22; stroke-linecap: round; }
+.fill  { fill: none; stroke: url(#heatGrad); stroke-width: 22; stroke-linecap: round; transition: stroke .25s, opacity .25s; }
+.tick  { stroke: var(--ink-soft); stroke-width: 1.5; stroke-linecap: round; opacity: .45; }
+.tick.mid { opacity: .7; }
+.tick.major { stroke-width: 2.5; opacity: .9; }
+.tick-label { fill: var(--ink-soft); font: 600 13px var(--f-body); text-anchor: middle; dominant-baseline: central; }
+.knob { fill: var(--white); stroke: var(--orange); stroke-width: 5; filter: drop-shadow(0 3px 6px var(--shadow)); transition: stroke .25s; }
+.now-mark { fill: var(--ink); stroke: var(--white); stroke-width: 3; }
+
+.dial.is-off .fill { stroke: var(--ink-soft); opacity: .3; }
+.dial.is-off .knob { stroke: var(--ink-soft); }
+
+.readout {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  text-align: center;
+  pointer-events: none;
+}
+.eyebrow {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.set-value {
+  display: flex;
+  align-items: flex-start;
+  font-family: var(--f-display);
+  font-weight: 800;
+  font-size: clamp(64px, 22vw, 92px);
+  line-height: .95;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+  margin-top: 4px;
+}
+.set-value .unit {
+  font-size: .32em;
+  letter-spacing: 0;
+  margin: .3em 0 0 .08em;
+  color: var(--orange-deep);
+}
+.dial.is-off .set-value .unit { color: var(--ink-soft); }
+.zones {
+  display: flex;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--sky);
+}
+.zones span {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 4px 8px;
+  border-radius: 999px;
+  color: var(--ink-soft);
+}
+.zones span.on { background: var(--white); color: var(--ink); box-shadow: 0 1px 3px var(--shadow); }
+
+.step {
+  position: absolute;
+  top: 87%;
+  width: 48px;
+  height: 48px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 0;
+  background: var(--white);
+  color: var(--ink);
+  box-shadow: 0 3px 10px var(--shadow);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.step svg { width: 20px; height: 20px; }
+.step.minus { left: 38%; }
+.step.plus  { left: 62%; }
+.step:active { transform: translate(-50%, -50%) scale(.94); }
+
+/* ---------- Current temperature ---------- */
+.now {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  margin-top: -6px;
+}
+.now-label { display: inline-flex; align-items: center; gap: 7px; }
+.now-label .mark { width: 9px; height: 9px; border-radius: 50%; background: var(--ink); }
+.now-value {
+  font-family: var(--f-display);
+  font-weight: 600;
+  font-size: 44px;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.now-value .unit { font-size: .5em; color: var(--ink-soft); margin-left: 2px; }
+
+.state {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  background: var(--sky-deep);
+  color: var(--ink-soft);
+}
+.state::before {
+  content: "";
+  width: 8px; height: 8px; border-radius: 50%;
+  background: currentColor;
+}
+.state[data-kind="heating"] { background: var(--orange-soft); color: var(--orange-deep); }
+.state[data-kind="heating"]::before { animation: pulse 1.2s ease-in-out infinite; }
+.state[data-kind="holding"] { background: var(--white); color: var(--ink); }
+.state[data-kind="alert"]   { background: var(--alert-soft); color: var(--alert); }
+@keyframes pulse { 50% { transform: scale(1.6); opacity: .45; } }
+
+/* ---------- OFF / ON switch ---------- */
+.power { width: 100%; display: grid; gap: 8px; }
+.power .eyebrow { text-align: center; }
+.switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 22px;
+  background: var(--white);
+  box-shadow: 0 4px 14px var(--shadow);
+}
+.switch button {
+  min-height: 60px;
+  border: 0;
+  border-radius: 16px;
+  font: 800 20px/1 var(--f-display);
+  letter-spacing: 0.04em;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: background-color .2s, color .2s;
+}
+.switch button[aria-pressed="true"].off { background: var(--ink); color: var(--white); }
+.switch button[aria-pressed="true"].on  { background: var(--orange); color: var(--white); }
+
+/* Controls rest when nothing is connected */
+.locked .dial, .locked .power { opacity: .55; }
+.locked .dial, .locked .power .switch { pointer-events: none; }
+
+/* ---------- Notice ---------- */
+.notice {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: var(--face);
+  box-shadow: 0 2px 10px var(--shadow);
+  display: grid;
+  gap: 10px;
+}
+.notice p { margin: 0; line-height: 1.45; }
+.notice strong { font-weight: 700; }
+.notice.alert { background: var(--alert-soft); color: var(--alert); box-shadow: none; }
+.notice .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.notice input {
+  width: 100%;
+  box-sizing: border-box;
+  font: 500 13px var(--f-body);
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--track);
+  background: var(--white);
+  color: var(--ink);
+}
+.btn {
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 0;
+  font: 700 14px/1 var(--f-body);
+  cursor: pointer;
+  background: var(--ink);
+  color: var(--white);
+}
+.btn.ghost { background: var(--sky-deep); color: var(--ink); }
+
+.foot {
+  margin-top: auto;
+  max-width: 34ch;
+  text-align: center;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--ink-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before { animation: none !important; transition: none !important; }
+}
+@media (max-height: 700px) {
+  .app { gap: 12px; }
+  .dial { width: min(100%, 320px); }
+}
+</style>
+</head>
+<body>
+<div class="app locked" id="app">
+  <header class="top">
+    <div class="brand">
+      <h1>Heat<span>Pad</span></h1>
+      <p>ESP32 thermostat</p>
+    </div>
+    <button class="conn" id="connBtn" type="button" data-state="idle">
+      <span class="dot" aria-hidden="true"></span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7l10 10-5 5V2l5 5L7 17"/></svg>
+      <span id="connText">Connect</span>
+    </button>
+  </header>
+
+  <div class="dial" id="dial" role="slider" tabindex="0"
+       aria-label="Set temperature" aria-valuemin="60" aria-valuemax="110" aria-valuenow="80" aria-valuetext="80 degrees Fahrenheit">
+    <svg viewBox="0 0 360 360" aria-hidden="true">
+      <defs>
+        <linearGradient id="heatGrad" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#FFB27A"/>
+          <stop offset="1" stop-color="#FF6A00"/>
+        </linearGradient>
+      </defs>
+      <g id="ticks"></g>
+      <path class="track" id="track"/>
+      <path class="fill" id="fill"/>
+      <circle class="face" cx="180" cy="180" r="104"/>
+      <circle class="now-mark" id="nowMark" r="6" cx="-50" cy="-50"/>
+      <circle class="knob" id="knob" r="15" cx="-50" cy="-50"/>
+    </svg>
+    <div class="readout">
+      <div class="eyebrow">Set to</div>
+      <div class="set-value"><span id="setTemp">80</span><span class="unit">°F</span></div>
+      <div class="zones" aria-hidden="true"><span data-z="LO">LO</span><span data-z="MI">MI</span><span data-z="HI">HI</span></div>
+    </div>
+    <button class="step minus" id="minusBtn" type="button" aria-label="Lower by 1 degree">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 12h14"/></svg>
+    </button>
+    <button class="step plus" id="plusBtn" type="button" aria-label="Raise by 1 degree">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 12h14M12 5v14"/></svg>
+    </button>
+  </div>
+
+  <section class="now" aria-live="polite">
+    <div class="now-label eyebrow"><span class="mark" aria-hidden="true"></span>Current temperature</div>
+    <div class="now-value"><span id="nowTemp">--.-</span><span class="unit">°F</span></div>
+    <div class="state" id="stateChip" data-kind="idle">Not connected</div>
+  </section>
+
+  <section class="power">
+    <div class="eyebrow">Heater</div>
+    <div class="switch" role="group" aria-label="Heater power">
+      <button type="button" class="off" id="offBtn" aria-pressed="true">OFF</button>
+      <button type="button" class="on" id="onBtn" aria-pressed="false">ON</button>
+    </div>
+  </section>
+
+  <div class="notice" id="notice" hidden></div>
+
+  <p class="foot">The ESP32 keeps holding the set temperature if your phone disconnects. The LCD shows the same reading.</p>
+</div>
+
+<script>
+(() => {
+  // ---- Must match the UUIDs in HeatPad_BLE.ino ----
+  const SERVICE_UUID = "8f3e1a2b-6c4d-4e5f-9a7b-2c1d0e9f8a10";
+  const STATUS_UUID  = "8f3e1a2b-6c4d-4e5f-9a7b-2c1d0e9f8a11";
+  const COMMAND_UUID = "8f3e1a2b-6c4d-4e5f-9a7b-2c1d0e9f8a12";
+  const NAME_PREFIX  = "HeatPad";
+
+  const MIN = 60, MAX = 110;
+  const START = 135, SWEEP = 270;          // degrees, clockwise from 3 o'clock
+  const CX = 180, CY = 180, R = 124;
+
+  const $ = id => document.getElementById(id);
+  const app = $("app"), dial = $("dial"), svg = dial.querySelector("svg");
+  const fillPath = $("fill"), knob = $("knob"), nowMark = $("nowMark");
+  const connBtn = $("connBtn"), connText = $("connText");
+  const notice = $("notice");
+
+  const state = {
+    mode: "none",          // none | ble | demo
+    setTemp: 80,
+    enabled: false,
+    heating: false,
+    sensor: false,
+    nowTemp: null
+  };
+
+  let dragging = false;
+  let lastLocalSet = 0, lastLocalEnable = 0;
+  let pendingSet = null, pendingEnable = null, busy = false;
+  let transport = null;
+
+  // ---------- geometry ----------
+  const clamp = v => Math.min(MAX, Math.max(MIN, v));
+  const valToAngle = v => START + (clamp(v) - MIN) / (MAX - MIN) * SWEEP;
+  function polar(deg, r) {
+    const a = deg * Math.PI / 180;
+    return [CX + r * Math.cos(a), CY + r * Math.sin(a)];
+  }
+  function arc(fromDeg, toDeg, r) {
+    const [x0, y0] = polar(fromDeg, r);
+    const [x1, y1] = polar(toDeg, r);
+    const large = (toDeg - fromDeg) > 180 ? 1 : 0;
+    return `M ${x0.toFixed(2)} ${y0.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`;
+  }
+  const zoneOf = t => t <= 75 ? "LO" : t <= 90 ? "MI" : "HI";   // same split as the LCD
+
+  // ---------- build static dial parts ----------
+  $("track").setAttribute("d", arc(START, START + SWEEP, R));
+  (function buildTicks() {
+    const g = $("ticks");
+    const NS = "http://www.w3.org/2000/svg";
+    for (let v = MIN; v <= MAX; v++) {
+      const major = v % 10 === 0, mid = v % 5 === 0;
+      const a = valToAngle(v);
+      const [x0, y0] = polar(a, 141);
+      const [x1, y1] = polar(a, major ? 151 : mid ? 148 : 145);
+      const line = document.createElementNS(NS, "line");
+      line.setAttribute("x1", x0.toFixed(2)); line.setAttribute("y1", y0.toFixed(2));
+      line.setAttribute("x2", x1.toFixed(2)); line.setAttribute("y2", y1.toFixed(2));
+      line.setAttribute("class", "tick" + (major ? " major" : mid ? " mid" : ""));
+      g.appendChild(line);
+      if (major) {
+        const [tx, ty] = polar(a, 166);
+        const t = document.createElementNS(NS, "text");
+        t.setAttribute("x", tx.toFixed(1)); t.setAttribute("y", ty.toFixed(1));
+        t.setAttribute("class", "tick-label");
+        t.textContent = v;
+        g.appendChild(t);
+      }
+    }
+  })();
+
+  // ---------- render ----------
+  function render() {
+    const t = state.setTemp;
+    const a = valToAngle(t);
+    $("setTemp").textContent = t;
+    fillPath.setAttribute("d", arc(START, Math.max(a, START + 0.01), R));
+    const [kx, ky] = polar(a, R);
+    knob.setAttribute("cx", kx.toFixed(2)); knob.setAttribute("cy", ky.toFixed(2));
+    dial.setAttribute("aria-valuenow", t);
+    dial.setAttribute("aria-valuetext", `${t} degrees Fahrenheit`);
+    dial.classList.toggle("is-off", !state.enabled);
+    document.querySelectorAll(".zones span").forEach(s => s.classList.toggle("on", s.dataset.z === zoneOf(t)));
+
+    const live = state.mode !== "none";
+    app.classList.toggle("locked", !live);
+
+    if (live && state.nowTemp !== null && !state.sensor) {
+      const [nx, ny] = polar(valToAngle(state.nowTemp), R);
+      nowMark.setAttribute("cx", nx.toFixed(2)); nowMark.setAttribute("cy", ny.toFixed(2));
+      nowMark.style.display = "";
+      $("nowTemp").textContent = state.nowTemp.toFixed(1);
+    } else {
+      nowMark.style.display = "none";
+      $("nowTemp").textContent = "--.-";
+    }
+
+    const chip = $("stateChip");
+    let kind = "idle", text = "Not connected";
+    if (live) {
+      if (state.sensor)        { kind = "alert";   text = "Check sensor wiring"; }
+      else if (!state.enabled) { kind = "idle";    text = "Heater is off"; }
+      else if (state.heating)  { kind = "heating"; text = `Heating to ${t}°F`; }
+      else                     { kind = "holding"; text = "At set temperature"; }
+    }
+    chip.dataset.kind = kind;
+    chip.textContent = text;
+
+    $("offBtn").setAttribute("aria-pressed", String(!state.enabled));
+    $("onBtn").setAttribute("aria-pressed", String(state.enabled));
+  }
+
+  // ---------- sending commands (one at a time; BLE can't overlap writes) ----------
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  async function pump() {
+    if (busy || !transport) return;
+    busy = true;
+    try {
+      while (transport && (pendingEnable !== null || pendingSet !== null)) {
+        let cmd;
+        if (pendingEnable !== null) { cmd = "E" + (pendingEnable ? 1 : 0); pendingEnable = null; }
+        else { cmd = "S" + pendingSet; pendingSet = null; }
+        await transport.write(cmd);
+        if (dragging) await sleep(120);   // keep drag updates to a few per second
+      }
+    } catch (err) {
+      showNotice(`<p><strong>That change didn't reach the HeatPad.</strong> ${escapeHtml(err.message || String(err))}. Move closer and try again.</p>`, true);
+    } finally {
+      busy = false;
+    }
+  }
+
+  function changeSet(v) {
+    v = clamp(Math.round(v));
+    if (v === state.setTemp) return;
+    state.setTemp = v;
+    lastLocalSet = Date.now();
+    pendingSet = v;
+    render();
+    pump();
+  }
+  function changeEnabled(on) {
+    state.enabled = on;
+    lastLocalEnable = Date.now();
+    pendingEnable = on;
+    render();
+    pump();
+  }
+
+  // ---------- status coming from the ESP32: "temp,set,enabled,heating,sensorProblem" ----------
+  function handleStatus(text) {
+    const p = String(text).trim().split(",");
+    if (p.length < 5) return;
+    const now = Date.now();
+    state.sensor = p[4] === "1";
+    const t = parseFloat(p[0]);
+    state.nowTemp = (state.sensor || isNaN(t)) ? null : t;
+    state.heating = p[3] === "1";
+    const s = parseInt(p[1], 10);
+    if (!dragging && pendingSet === null && now - lastLocalSet > 1500 && !isNaN(s)) state.setTemp = clamp(s);
+    if (pendingEnable === null && now - lastLocalEnable > 1500) state.enabled = p[2] === "1";
+    render();
+  }
+  const decode = dv => new TextDecoder().decode(new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength));
+
+  // ---------- Bluetooth ----------
+  let bleDevice = null, statusChar = null, cmdChar = null, userDisconnect = false;
+
+  function bluetoothBlockedHere() {
+    try {
+      const fp = document.permissionsPolicy || document.featurePolicy;
+      if (fp && typeof fp.allowsFeature === "function" && fp.features && fp.features().includes("bluetooth")) {
+        return !fp.allowsFeature("bluetooth");
+      }
+    } catch (e) {}
+    return false;
+  }
+
+  async function connectBle() {
+    if (!("bluetooth" in navigator)) { showNoBluetooth(); return; }
+    if (bluetoothBlockedHere()) { showBlocked(); return; }
+    hideNotice();
+    stopDemo();
+    setConn("connecting");
+    try {
+      if (!bleDevice) {
+        bleDevice = await navigator.bluetooth.requestDevice({
+          filters: [{ services: [SERVICE_UUID] }, { namePrefix: NAME_PREFIX }],
+          optionalServices: [SERVICE_UUID]
+        });
+        bleDevice.addEventListener("gattserverdisconnected", onBleDisconnected);
+      }
+      userDisconnect = false;
+      const server = await bleDevice.gatt.connect();
+      const service = await server.getPrimaryService(SERVICE_UUID);
+      statusChar = await service.getCharacteristic(STATUS_UUID);
+      cmdChar = await service.getCharacteristic(COMMAND_UUID);
+      statusChar.addEventListener("characteristicvaluechanged", onStatusEvent);
+      await statusChar.startNotifications();
+
+      transport = { write: writeBle };
+      state.mode = "ble";
+      lastLocalSet = lastLocalEnable = 0;
+      pendingSet = pendingEnable = null;
+      setConn("connected");
+      try { handleStatus(decode(await statusChar.readValue())); } catch (e) {}
+      render();
+    } catch (err) {
+      transport = null;
+      state.mode = "none";
+      setConn(bleDevice ? "lost" : "idle");
+      render();
+      if (err && err.name === "NotFoundError") {
+        showNotice(`<p><strong>No HeatPad picked.</strong> Check that the ESP32 is powered and close by, then tap Connect and choose <strong>HeatPad</strong> from the list.</p>`);
+      } else if (err && err.name === "SecurityError") {
+        showBlocked();
+      } else {
+        showNotice(`<p><strong>Couldn't connect.</strong> ${escapeHtml((err && err.message) || String(err))}. Power-cycle the ESP32 and try again.</p>`, true);
+      }
+    }
+  }
+
+  async function writeBle(cmd) {
+    if (!cmdChar) throw new Error("Not connected");
+    const bytes = new TextEncoder().encode(cmd);
+    if (cmdChar.writeValueWithResponse) await cmdChar.writeValueWithResponse(bytes);
+    else await cmdChar.writeValue(bytes);
+  }
+  function onStatusEvent(e) { handleStatus(decode(e.target.value)); }
+
+  function onBleDisconnected() {
+    statusChar = cmdChar = null;
+    if (state.mode !== "ble") return;
+    transport = null;
+    state.mode = "none";
+    setConn(userDisconnect ? "idle" : "lost");
+    if (userDisconnect) bleDevice = null;
+    render();
+    if (!userDisconnect) {
+      showNotice(`<p><strong>Lost the connection.</strong> The HeatPad is still running at ${state.setTemp}°F. Tap Reconnect when you're back in range.</p>`);
+    }
+  }
+
+  function disconnectBle() {
+    userDisconnect = true;
+    if (bleDevice && bleDevice.gatt.connected) bleDevice.gatt.disconnect();
+    else onBleDisconnected();
+  }
+
+  // ---------- Demo (simulated HeatPad, for trying the app without hardware) ----------
+  let sim = null, simTimer = null;
+  function simStatus() {
+    return `${sim.temp.toFixed(1)},${sim.set},${sim.enabled ? 1 : 0},${sim.heating ? 1 : 0},0`;
+  }
+  function simStep() {
+    if (!sim.enabled) sim.heating = false;
+    else {
+      if (sim.temp <= sim.set - 1) sim.heating = true;
+      if (sim.temp >= sim.set + 1) sim.heating = false;
+    }
+    sim.temp += sim.heating ? 0.6 : (sim.temp > 66 ? -0.25 : 0);
+  }
+  function startDemo() {
+    if (state.mode === "ble") disconnectBle();
+    hideNotice();
+    sim = { temp: 68.4, set: state.setTemp, enabled: true, heating: false };
+    transport = {
+      write: async cmd => {
+        await sleep(30);
+        if (cmd[0] === "S") sim.set = clamp(parseInt(cmd.slice(1), 10));
+        if (cmd[0] === "E") sim.enabled = cmd[1] === "1";
+        simStep();
+        handleStatus(simStatus());
+      }
+    };
+    state.mode = "demo";
+    lastLocalSet = lastLocalEnable = 0;
+    setConn("demo");
+    handleStatus(simStatus());
+    clearInterval(simTimer);
+    simTimer = setInterval(() => { simStep(); handleStatus(simStatus()); }, 1000);
+  }
+  function stopDemo() {
+    clearInterval(simTimer);
+    simTimer = null;
+    if (state.mode === "demo") {
+      state.mode = "none";
+      transport = null;
+      setConn("idle");
+      render();
+    }
+  }
+
+  // ---------- connection button ----------
+  let confirmTimer = null;
+  function setConn(s) {
+    connBtn.dataset.state = s;
+    connBtn.disabled = s === "connecting";
+    connText.textContent = {
+      idle: "Connect",
+      connecting: "Connecting…",
+      connected: "Connected",
+      lost: "Reconnect",
+      demo: "Demo · Exit",
+      confirm: "Disconnect?"
+    }[s];
+  }
+  connBtn.addEventListener("click", () => {
+    const s = connBtn.dataset.state;
+    if (s === "idle" || s === "lost") connectBle();
+    else if (s === "demo") stopDemo();
+    else if (s === "connected") {
+      setConn("confirm");
+      clearTimeout(confirmTimer);
+      confirmTimer = setTimeout(() => { if (connBtn.dataset.state === "confirm") setConn("connected"); }, 3000);
+    } else if (s === "confirm") {
+      clearTimeout(confirmTimer);
+      disconnectBle();
+    }
+  });
+
+  // ---------- notices ----------
+  function escapeHtml(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+  function showNotice(html, isAlert) {
+    notice.innerHTML = html;
+    notice.classList.toggle("alert", !!isAlert);
+    notice.hidden = false;
+  }
+  function hideNotice() { notice.hidden = true; notice.innerHTML = ""; }
+
+  const inFrame = (() => { try { return window.self !== window.top; } catch (e) { return true; } })();
+
+  function demoButton() { return `<button class="btn ghost" type="button" data-act="demo">Try demo</button>`; }
+  function showNoBluetooth() {
+    const copy = inFrame ? "" :
+      `<button class="btn" type="button" data-act="copy">Copy this page's link</button>`;
+    showNotice(
+      `<p><strong>This browser can't use Bluetooth.</strong> On iPhone, Safari and Chrome don't support it. Open this page in the free <strong>Bluefy</strong> app from the App Store instead.</p>
+       <div class="actions">${copy}${demoButton()}</div>`);
+  }
+  function showBlocked() {
+    showNotice(
+      `<p><strong>Bluetooth is turned off for this preview.</strong> Open the hosted copy of HeatPad in Bluefy (iPhone) or Chrome (computer or Android) to connect.</p>
+       <div class="actions">${demoButton()}</div>`);
+  }
+  notice.addEventListener("click", async e => {
+    const act = e.target.closest("[data-act]");
+    if (!act) return;
+    if (act.dataset.act === "demo") startDemo();
+    if (act.dataset.act === "copy") {
+      try {
+        await navigator.clipboard.writeText(location.href);
+        act.textContent = "Link copied";
+      } catch (err) {
+        const input = document.createElement("input");
+        input.id = "pageLink";
+        input.readOnly = true;
+        input.value = location.href;
+        act.replaceWith(input);
+        input.focus(); input.select();
+      }
+    }
+  });
+
+  // ---------- dial interaction ----------
+  function pointToSvg(e) {
+    const r = svg.getBoundingClientRect();
+    return [(e.clientX - r.left) / r.width * 360, (e.clientY - r.top) / r.height * 360];
+  }
+  function valueFromPoint(x, y) {
+    let deg = Math.atan2(y - CY, x - CX) * 180 / Math.PI;
+    let rel = (deg - START + 720) % 360;
+    if (rel > SWEEP) rel = rel > SWEEP + (360 - SWEEP) / 2 ? 0 : SWEEP;   // in the bottom gap: snap to nearer end
+    return MIN + rel / SWEEP * (MAX - MIN);
+  }
+  dial.addEventListener("pointerdown", e => {
+    if (e.target.closest(".step") || state.mode === "none") return;
+    const [x, y] = pointToSvg(e);
+    const d = Math.hypot(x - CX, y - CY);
+    if (d < 92) return;                 // taps on the center face don't move the dial
+    dragging = true;
+    dial.classList.add("dragging");
+    dial.setPointerCapture(e.pointerId);
+    changeSet(valueFromPoint(x, y));
+    e.preventDefault();
+  });
+  dial.addEventListener("pointermove", e => {
+    if (!dragging) return;
+    const [x, y] = pointToSvg(e);
+    const v = Math.round(valueFromPoint(x, y));
+    if (Math.abs(v - state.setTemp) > 20) return;   // don't jump across the gap between 110 and 60
+    changeSet(v);
+  });
+  function endDrag() {
+    if (!dragging) return;
+    dragging = false;
+    dial.classList.remove("dragging");
+    pendingSet = state.setTemp;          // make sure the final value is sent
+    lastLocalSet = Date.now();
+    pump();
+  }
+  dial.addEventListener("pointerup", endDrag);
+  dial.addEventListener("pointercancel", endDrag);
+  dial.addEventListener("keydown", e => {
+    if (state.mode === "none") return;
+    const k = e.key;
+    let v = state.setTemp;
+    if (k === "ArrowUp" || k === "ArrowRight") v += 1;
+    else if (k === "ArrowDown" || k === "ArrowLeft") v -= 1;
+    else if (k === "PageUp") v += 5;
+    else if (k === "PageDown") v -= 5;
+    else if (k === "Home") v = MIN;
+    else if (k === "End") v = MAX;
+    else return;
+    e.preventDefault();
+    changeSet(v);
+  });
+  $("minusBtn").addEventListener("click", () => changeSet(state.setTemp - 1));
+  $("plusBtn").addEventListener("click", () => changeSet(state.setTemp + 1));
+  $("offBtn").addEventListener("click", () => changeEnabled(false));
+  $("onBtn").addEventListener("click", () => changeEnabled(true));
+
+  // ---------- start ----------
+  setConn("idle");
+  render();
+  if (!("bluetooth" in navigator)) showNoBluetooth();
+  else if (bluetoothBlockedHere()) showBlocked();
+})();
+</script>
+</body>
+</html>
